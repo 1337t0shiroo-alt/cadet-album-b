@@ -3,7 +3,7 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta charset="UTF-8">
-    <title>ДВЮИ МВД - AR Альбом</title>
+    <title>AR Альбом - ДВЮИ</title>
     
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image.prod.js"></script>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
@@ -11,37 +11,22 @@
 
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
-
-        /* Кнопка старта */
         #startButton {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             z-index: 10000; padding: 18px 36px; font-size: 18px; font-weight: bold;
             background: #002d5e; color: #d4af37; border: 2px solid #d4af37;
-            border-radius: 50px; cursor: pointer; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            text-transform: uppercase;
+            border-radius: 50px; cursor: pointer; text-transform: uppercase;
         }
-
-        /* Кнопка звука */
-        #muteButton {
-            position: fixed; bottom: 30px; right: 30px; z-index: 10000;
-            width: 60px; height: 60px; background: rgba(0, 45, 94, 0.85);
-            color: #d4af37; border: 1px solid #d4af37; border-radius: 50%;
-            cursor: pointer; display: none; font-size: 24px;
-        }
-
-        /* Индикатор сканирования */
-        #overlay {
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 9999; color: #fff; background: rgba(0,0,0,0.6);
-            padding: 10px 20px; border-radius: 20px; display: none;
+        #errorLog {
+            position: fixed; bottom: 10px; left: 10px; z-index: 10001;
+            color: red; font-size: 12px; background: rgba(255,255,255,0.8); display: none;
         }
     </style>
 </head>
 <body>
 
-    <button id="startButton">Загрузка данных...</button>
-    <button id="muteButton">🔇</button>
-    <div id="overlay">Наведите камеру на фото курсанта</div>
+    <div id="errorLog"></div>
+    <button id="startButton">Подготовка...</button>
 
     <a-scene id="main-scene" color-space="sRGB" renderer="colorManagement: true, precision: medium;" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
         <a-assets id="video-assets"></a-assets>
@@ -49,33 +34,36 @@
     </a-scene>
 
     <script>
-        // Читаем параметры из ссылки: squad (номер взвода) и count (количество людей)
+        // Функция для вывода ошибок на экран телефона
+        window.onerror = function(msg) {
+            const log = document.getElementById('errorLog');
+            log.style.display = 'block';
+            log.innerHTML += msg + "<br>";
+        };
+
         const params = new URLSearchParams(window.location.search);
         const squadId = params.get('squad') || '1'; 
         const count = parseInt(params.get('count')) || 4; 
 
         const sceneEl = document.querySelector('#main-scene');
         const assetsEl = document.querySelector('#video-assets');
-        const startButton = document.querySelector('#startButton');
-        const muteButton = document.querySelector('#muteButton');
-        const overlay = document.querySelector('#overlay');
+        const startButton = document.getElementById('startButton');
 
-        // Настройка файла маркеров (squad1.mind, squad2.mind и т.д.)
-        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001;`);
+        // Настройка параметров сцены
+        const targetPath = `./targets/squad${squadId}.mind`;
+        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ${targetPath}; autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001; uiScanning: no;`);
 
-        // Динамическое создание видео и мишеней
+        // Создание элементов
         for (let i = 0; i < count; i++) {
-            // 1. Создаем видео в ассетах
             const v = document.createElement('video');
             v.id = `vid${i}`;
-            v.src = `./videos/${squadId}_${i}.mp4`; // формат: взвод_индекс.mp4
+            v.src = `./videos/${squadId}_${i}.mp4`;
             v.setAttribute('loop', 'true');
             v.setAttribute('crossorigin', 'anonymous');
             v.setAttribute('playsinline', '');
             v.muted = true;
             assetsEl.appendChild(v);
 
-            // 2. Создаем AR-сущность
             const entity = document.createElement('a-entity');
             entity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
             
@@ -83,22 +71,15 @@
             plane.setAttribute('src', `#vid${i}`);
             plane.setAttribute('width', '1');
             plane.setAttribute('height', '1.42');
-            plane.setAttribute('position', '0 0 0');
             
             entity.appendChild(plane);
             sceneEl.appendChild(entity);
 
-            // 3. Логика воспроизведения
-            entity.addEventListener('targetFound', () => {
-                v.play();
-                overlay.style.display = 'none';
-            });
-            entity.addEventListener('targetLost', () => {
-                v.pause();
-                overlay.style.display = 'block';
-            });
+            entity.addEventListener('targetFound', () => v.play());
+            entity.addEventListener('targetLost', () => v.pause());
         }
 
+        // Если дошли сюда - скрипт работает
         startButton.innerText = "Оживить альбом";
 
         startButton.addEventListener('click', () => {
@@ -107,23 +88,7 @@
                 vid.play().then(() => vid.pause());
             });
             startButton.style.display = 'none';
-            muteButton.style.display = 'block';
-            overlay.style.display = 'block';
         });
-
-        muteButton.addEventListener('click', () => {
-            const vids = document.querySelectorAll('video');
-            const currentState = vids[0].muted;
-            vids.forEach(vid => vid.muted = !currentState);
-            muteButton.innerText = currentState ? '🔊' : '🔇';
-        });
-
-        // Защита от замирания кадров
-        setInterval(() => {
-            document.querySelectorAll('video').forEach(vid => {
-                if (!vid.paused && vid.readyState >= 2) vid.currentTime += 0.01;
-            });
-        }, 1000);
     </script>
 </body>
 </html>
