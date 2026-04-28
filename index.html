@@ -11,36 +11,40 @@
 
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        
+        /* Кнопка старта */
         #startButton {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             z-index: 10000; padding: 18px 36px; font-size: 18px; font-weight: bold;
             background: #002d5e; color: #d4af37; border: 2px solid #d4af37;
             border-radius: 50px; cursor: pointer; text-transform: uppercase;
         }
-        #errorLog {
-            position: fixed; bottom: 10px; left: 10px; z-index: 10001;
-            color: red; font-size: 12px; background: rgba(255,255,255,0.8); display: none;
+
+        /* Кнопка звука */
+        #muteButton {
+            position: fixed; bottom: 30px; right: 30px; z-index: 10000;
+            width: 60px; height: 60px; background: rgba(0, 45, 94, 0.85);
+            color: #d4af37; border: 1px solid #d4af37; border-radius: 50%;
+            cursor: pointer; display: none; font-size: 24px;
+            display: flex; align-items: center; justify-content: center;
         }
     </style>
 </head>
 <body>
 
-    <div id="errorLog"></div>
-    <button id="startButton">Подготовка...</button>
+    <button id="startButton">Загрузка...</button>
+    <button id="muteButton" style="display:none;">🔇</button>
 
-    <a-scene id="main-scene" color-space="sRGB" renderer="colorManagement: true, precision: medium;" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+    <a-scene id="main-scene" 
+        mindar-image="imageTargetSrc: ./targets/squad1.mind; autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001; missTolerance: 5;" 
+        color-space="sRGB" renderer="colorManagement: true, precision: medium;" 
+        vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+        
         <a-assets id="video-assets"></a-assets>
         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
     </a-scene>
 
     <script>
-        // Функция для вывода ошибок на экран телефона
-        window.onerror = function(msg) {
-            const log = document.getElementById('errorLog');
-            log.style.display = 'block';
-            log.innerHTML += msg + "<br>";
-        };
-
         const params = new URLSearchParams(window.location.search);
         const squadId = params.get('squad') || '1'; 
         const count = parseInt(params.get('count')) || 4; 
@@ -48,12 +52,12 @@
         const sceneEl = document.querySelector('#main-scene');
         const assetsEl = document.querySelector('#video-assets');
         const startButton = document.getElementById('startButton');
+        const muteButton = document.getElementById('muteButton');
 
-        // Настройка параметров сцены
-        const targetPath = `./targets/squad${squadId}.mind`;
-        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ${targetPath}; autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001; uiScanning: no;`);
+        // Настройка пути к маркеру
+        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001; uiScanning: no;`);
 
-        // Создание элементов
+        // Создаем видео для каждого курсанта
         for (let i = 0; i < count; i++) {
             const v = document.createElement('video');
             v.id = `vid${i}`;
@@ -61,7 +65,8 @@
             v.setAttribute('loop', 'true');
             v.setAttribute('crossorigin', 'anonymous');
             v.setAttribute('playsinline', '');
-            v.muted = true;
+            v.setAttribute('webkit-playsinline', '');
+            v.muted = true; // Видео ВСЕГДА должно начинаться без звука
             assetsEl.appendChild(v);
 
             const entity = document.createElement('a-entity');
@@ -79,16 +84,38 @@
             entity.addEventListener('targetLost', () => v.pause());
         }
 
-        // Если дошли сюда - скрипт работает
         startButton.innerText = "Оживить альбом";
 
         startButton.addEventListener('click', () => {
             sceneEl.systems['mindar-image-system'].start();
+            
+            // "Будим" все видео сразу, чтобы браузер разрешил звук
             document.querySelectorAll('video').forEach(vid => {
                 vid.play().then(() => vid.pause());
             });
+
             startButton.style.display = 'none';
+            muteButton.style.display = 'flex';
         });
+
+        // ЛОГИКА ЗВУКА
+        muteButton.addEventListener('click', () => {
+            const allVideos = document.querySelectorAll('video');
+            const isCurrentlyMuted = allVideos[0].muted;
+
+            allVideos.forEach(vid => {
+                vid.muted = !isCurrentlyMuted;
+            });
+
+            muteButton.innerText = isCurrentlyMuted ? '🔊' : '🔇';
+        });
+
+        // Плавная прокрутка кадров (защита от замирания)
+        setInterval(() => {
+            document.querySelectorAll('video').forEach(vid => {
+                if (!vid.paused && vid.readyState >= 2) vid.currentTime += 0.01;
+            });
+        }, 1000);
     </script>
 </body>
 </html>
