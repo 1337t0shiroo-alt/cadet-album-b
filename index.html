@@ -3,7 +3,7 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta charset="UTF-8">
-    <title>AR Альбом - ДВЮИ</title>
+    <title>AR Album - DVUI</title>
     
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image.prod.js"></script>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
@@ -12,15 +12,14 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         
-        /* Кнопка старта */
         #startButton {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             z-index: 10000; padding: 18px 36px; font-size: 18px; font-weight: bold;
             background: #002d5e; color: #d4af37; border: 2px solid #d4af37;
             border-radius: 50px; cursor: pointer; text-transform: uppercase;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
         }
 
-        /* Кнопка звука */
         #muteButton {
             position: fixed; bottom: 30px; right: 30px; z-index: 10000;
             width: 60px; height: 60px; background: rgba(0, 45, 94, 0.85);
@@ -33,11 +32,12 @@
 <body>
 
     <button id="startButton">Загрузка...</button>
-    <button id="muteButton" style="display:none;">🔇</button>
+    <button id="muteButton">🔇</button>
 
     <a-scene id="main-scene" 
-        mindar-image="imageTargetSrc: ./targets/squad1.mind; autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001; missTolerance: 5;" 
-        color-space="sRGB" renderer="colorManagement: true, precision: medium;" 
+        mindar-image="imageTargetSrc: ./targets/squad1.mind; autoStart: false; filterMinCF: 0.001; filterBeta: 0.01; uiScanning: no;" 
+        color-space="sRGB" 
+        renderer="colorManagement: true, precision: low, antialias: false, powerPreference: high-performance;" 
         vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
         
         <a-assets id="video-assets"></a-assets>
@@ -54,10 +54,9 @@
         const startButton = document.getElementById('startButton');
         const muteButton = document.getElementById('muteButton');
 
-        // Настройка пути к маркеру
-        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001; uiScanning: no;`);
+        // Установка пути к файлу маркеров
+        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; filterMinCF: 0.001; filterBeta: 0.01; uiScanning: no;`);
 
-        // Создаем видео для каждого курсанта
         for (let i = 0; i < count; i++) {
             const v = document.createElement('video');
             v.id = `vid${i}`;
@@ -66,7 +65,7 @@
             v.setAttribute('crossorigin', 'anonymous');
             v.setAttribute('playsinline', '');
             v.setAttribute('webkit-playsinline', '');
-            v.muted = true; // Видео ВСЕГДА должно начинаться без звука
+            v.muted = true;
             assetsEl.appendChild(v);
 
             const entity = document.createElement('a-entity');
@@ -89,7 +88,7 @@
         startButton.addEventListener('click', () => {
             sceneEl.systems['mindar-image-system'].start();
             
-            // "Будим" все видео сразу, чтобы браузер разрешил звук
+            // Массовый запуск для снятия блокировок браузера
             document.querySelectorAll('video').forEach(vid => {
                 vid.play().then(() => vid.pause());
             });
@@ -98,24 +97,23 @@
             muteButton.style.display = 'flex';
         });
 
-        // ЛОГИКА ЗВУКА
         muteButton.addEventListener('click', () => {
-            const allVideos = document.querySelectorAll('video');
-            const isCurrentlyMuted = allVideos[0].muted;
-
-            allVideos.forEach(vid => {
-                vid.muted = !isCurrentlyMuted;
-            });
-
-            muteButton.innerText = isCurrentlyMuted ? '🔊' : '🔇';
+            const vids = document.querySelectorAll('video');
+            const isMuted = vids[0].muted;
+            vids.forEach(v => v.muted = !isMuted);
+            muteButton.innerText = isMuted ? '🔊' : '🔇';
         });
 
-        // Плавная прокрутка кадров (защита от замирания)
+        // Упрощенная проверка состояния (снижает нагрузку на CPU)
+        let checkCounter = 0;
         setInterval(() => {
-            document.querySelectorAll('video').forEach(vid => {
-                if (!vid.paused && vid.readyState >= 2) vid.currentTime += 0.01;
-            });
-        }, 1000);
+            checkCounter++;
+            if (checkCounter % 5 === 0) { // Проверка раз в 5 циклов
+                document.querySelectorAll('video').forEach(vid => {
+                    if (!vid.paused && vid.readyState < 2) vid.load();
+                });
+            }
+        }, 500);
     </script>
 </body>
 </html>
