@@ -12,7 +12,6 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         
-        /* Кнопка старта */
         #startButton {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             z-index: 10000; padding: 20px 40px; font-size: 18px; font-weight: bold;
@@ -20,46 +19,45 @@
             border-radius: 50px; cursor: pointer; text-transform: uppercase;
         }
 
-        /* Главный контейнер плеера */
-        #playerOverlay {
+        /* КОНТЕЙНЕР ДЛЯ ВИДЕО-ПЛЕЕРА */
+        #videoContainer {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.95); z-index: 20000;
+            background: rgba(0,0,0,0.9); z-index: 20000;
             display: none; align-items: center; justify-content: center;
         }
-
+        
         #mainVideo {
-            width: 100%; max-height: 100%; outline: none;
+            width: 100%; max-height: 80vh; border: 2px solid #d4af37;
         }
 
-        #closeBtn {
-            position: absolute; top: 25px; right: 20px; z-index: 20001;
-            padding: 12px 20px; background: #d4af37; color: #002d5e;
+        #closeButton {
+            position: absolute; top: 30px; right: 20px;
+            padding: 15px 25px; background: #d4af37; color: #002d5e;
             border-radius: 10px; font-weight: bold; cursor: pointer;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
         }
 
-        #scanStatus {
+        #overlay {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 999; color: #fff; background: rgba(0,0,0,0.6);
+            z-index: 9998; color: #fff; background: rgba(0,0,0,0.6);
             padding: 10px 25px; border-radius: 30px; border: 1px solid #d4af37;
-            pointer-events: none; text-align: center; font-size: 14px;
         }
     </style>
 </head>
 <body>
 
-    <button id="startButton">ОТКРЫТЬ КАМЕРУ</button>
+    <button id="startButton">ЗАПУСТИТЬ КАМЕРУ</button>
 
-    <div id="scanStatus">Поиск фотографии курсанта...</div>
-
-    <div id="playerOverlay">
-        <div id="closeBtn">ЗАКРЫТЬ [X]</div>
-        <video id="mainVideo" controls playsinline webkit-playsinline></video>
+    <div id="videoContainer">
+        <div id="closeButton">ЗАКРЫТЬ X</div>
+        <video id="mainVideo" controls playsinline></video>
     </div>
+
+    <div id="overlay">Наведите камеру на фотографию</div>
 
     <a-scene id="main-scene" 
         mindar-image="autoStart: false; uiScanning: no;" 
-        embedded vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+        embedded color-space="sRGB" 
+        vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
     </a-scene>
 
@@ -69,56 +67,46 @@
         const count = parseInt(params.get('count')) || 4; 
 
         const sceneEl = document.querySelector('#main-scene');
-        const startBtn = document.getElementById('startButton');
-        const player = document.getElementById('playerOverlay');
-        const video = document.getElementById('mainVideo');
-        const closeBtn = document.getElementById('closeBtn');
-        const status = document.getElementById('scanStatus');
+        const startButton = document.getElementById('startButton');
+        const videoContainer = document.getElementById('videoContainer');
+        const mainVideo = document.getElementById('mainVideo');
+        const closeButton = document.getElementById('closeButton');
 
-        // Подключаем библиотеку маркеров
+        // Подключаем только маркеры
         sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; uiScanning: no;`);
 
-        // Создаем невидимые триггеры для каждого курсанта
+        // Создаем скрытые цели
         for (let i = 0; i < count; i++) {
             const entity = document.createElement('a-entity');
             entity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
             
+            // Как только цель найдена
             entity.addEventListener('targetFound', () => {
-                // Если плеер уже открыт — игнорируем
-                if (player.style.display === 'flex') return;
-
                 const videoPath = `./videos/${squadId}_${i}.mp4`;
                 
-                // Запускаем видео в плеере
-                video.src = videoPath;
-                player.style.display = 'flex';
-                video.load(); // Важно: принудительная перезагрузка источника
-                video.play();
-                status.style.display = 'none';
+                // Если плеер уже открыт — ничего не делаем
+                if (videoContainer.style.display === 'flex') return;
+
+                // Загружаем видео в главный плеер
+                mainVideo.src = videoPath;
+                videoContainer.style.display = 'flex';
+                mainVideo.play();
             });
 
             sceneEl.appendChild(entity);
         }
 
-        // Кнопка закрытия: полностью очищаем состояние
-        closeBtn.addEventListener('click', () => {
-            video.pause();
-            video.src = ""; // Очищаем путь, чтобы избежать кэширования черного кадра
-            player.style.display = 'none';
-            status.style.display = 'block';
+        // Кнопка закрытия плеера
+        closeButton.addEventListener('click', () => {
+            mainVideo.pause();
+            mainVideo.src = "";
+            videoContainer.style.display = 'none';
         });
 
-        // Старт работы
-        startBtn.addEventListener('click', () => {
+        startButton.addEventListener('click', () => {
             sceneEl.systems['mindar-image-system'].start();
-            startBtn.style.display = 'none';
+            startButton.style.display = 'none';
         });
-
-        // Обработка ошибок видео
-        video.onerror = () => {
-            alert("Ошибка загрузки видео. Проверьте интернет или название файла.");
-            player.style.display = 'none';
-        };
     </script>
 </body>
 </html>
