@@ -12,7 +12,6 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         
-        /* Кнопка старта */
         #startButton {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             z-index: 10000; padding: 20px 40px; font-size: 18px; font-weight: bold;
@@ -20,27 +19,28 @@
             border-radius: 50px; cursor: pointer; text-transform: uppercase;
         }
 
-        /* Главный контейнер плеера */
-        #playerOverlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.95); z-index: 20000;
-            display: none; align-items: center; justify-content: center;
+        /* Тот самый ПСЕВДО-FULLSCREEN */
+        #videoOverlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #000; z-index: 30000;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
         }
 
-        #mainVideo {
-            width: 100%; max-height: 100%; outline: none;
+        #uiVideo {
+            width: 100%; height: auto; max-height: 100%;
+            object-fit: contain; /* Чтобы горизонтальное видео не растягивалось */
         }
 
         #closeBtn {
-            position: absolute; top: 25px; right: 20px; z-index: 20001;
-            padding: 12px 20px; background: #d4af37; color: #002d5e;
+            position: absolute; top: 30px; right: 20px; z-index: 30001;
+            padding: 15px 25px; background: #d4af37; color: #002d5e;
             border-radius: 10px; font-weight: bold; cursor: pointer;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            text-transform: uppercase; border: none;
         }
 
         #scanStatus {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 999; color: #fff; background: rgba(0,0,0,0.6);
+            z-index: 999; color: #fff; background: rgba(0,0,0,0.7);
             padding: 10px 25px; border-radius: 30px; border: 1px solid #d4af37;
             pointer-events: none; text-align: center; font-size: 14px;
         }
@@ -50,15 +50,15 @@
 
     <button id="startButton">ОТКРЫТЬ КАМЕРУ</button>
 
-    <div id="scanStatus">Поиск фотографии курсанта...</div>
+    <div id="scanStatus">Наведите камеру на фотографию</div>
 
-    <div id="playerOverlay">
-        <div id="closeBtn">ЗАКРЫТЬ [X]</div>
-        <video id="mainVideo" controls playsinline webkit-playsinline></video>
+    <div id="videoOverlay">
+        <button id="closeBtn">ЗАКРЫТЬ [X]</button>
+        <video id="uiVideo" controls playsinline webkit-playsinline></video>
     </div>
 
     <a-scene id="main-scene" 
-        mindar-image="autoStart: false; uiScanning: no;" 
+        mindar-image="autoStart: false; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001;" 
         embedded vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
     </a-scene>
@@ -70,55 +70,51 @@
 
         const sceneEl = document.querySelector('#main-scene');
         const startBtn = document.getElementById('startButton');
-        const player = document.getElementById('playerOverlay');
-        const video = document.getElementById('mainVideo');
+        const overlay = document.getElementById('videoOverlay');
+        const video = document.getElementById('uiVideo');
         const closeBtn = document.getElementById('closeBtn');
         const status = document.getElementById('scanStatus');
 
-        // Подключаем библиотеку маркеров
         sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; uiScanning: no;`);
 
-        // Создаем невидимые триггеры для каждого курсанта
+        // Создаем невидимые триггеры
         for (let i = 0; i < count; i++) {
             const entity = document.createElement('a-entity');
             entity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
             
             entity.addEventListener('targetFound', () => {
-                // Если плеер уже открыт — игнорируем
-                if (player.style.display === 'flex') return;
+                if (overlay.style.display === 'flex') return;
 
-                const videoPath = `./videos/${squadId}_${i}.mp4`;
+                // Важный трюк: добавляем случайное число к ссылке (cache-buster),
+                // чтобы браузер каждый раз подгружал видео заново без черных кадров.
+                const videoPath = `./videos/${squadId}_${i}.mp4?v=${new Date().getTime()}`;
                 
-                // Запускаем видео в плеере
                 video.src = videoPath;
-                player.style.display = 'flex';
-                video.load(); // Важно: принудительная перезагрузка источника
-                video.play();
+                overlay.style.display = 'flex';
                 status.style.display = 'none';
+                
+                // Небольшая задержка перед воспроизведением для плавности
+                setTimeout(() => {
+                    video.play().catch(e => console.log("Нужен клик для звука"));
+                }, 100);
             });
 
             sceneEl.appendChild(entity);
         }
 
-        // Кнопка закрытия: полностью очищаем состояние
+        // Закрытие плеера
         closeBtn.addEventListener('click', () => {
             video.pause();
-            video.src = ""; // Очищаем путь, чтобы избежать кэширования черного кадра
-            player.style.display = 'none';
+            video.removeAttribute('src'); // Полностью выгружаем видео
+            video.load();
+            overlay.style.display = 'none';
             status.style.display = 'block';
         });
 
-        // Старт работы
         startBtn.addEventListener('click', () => {
             sceneEl.systems['mindar-image-system'].start();
             startBtn.style.display = 'none';
         });
-
-        // Обработка ошибок видео
-        video.onerror = () => {
-            alert("Ошибка загрузки видео. Проверьте интернет или название файла.");
-            player.style.display = 'none';
-        };
     </script>
 </body>
 </html>
