@@ -3,7 +3,7 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta charset="UTF-8">
-    <title>AR Альбом - Магия ДВЮИ</title>
+    <title>AR Альбом - ДВЮИ МВД</title>
     
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image.prod.js"></script>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
@@ -19,7 +19,7 @@
             border-radius: 50px; cursor: pointer; text-transform: uppercase;
         }
 
-        /* Полноэкранный плеер (для детального просмотра) */
+        /* Полноэкранный плеер */
         #fsContainer {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: #000; z-index: 30000; display: none;
@@ -32,7 +32,7 @@
             border-radius: 10px; font-weight: bold; border: none;
         }
 
-        /* Слой для клика, чтобы развернуть видео */
+        /* Слой для тапа */
         #clickOverlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 500; display: none;
@@ -48,8 +48,8 @@
 </head>
 <body>
 
-    <button id="startButton">Оживить фото</button>
-    <div id="statusText">Загрузка системы...</div>
+    <button id="startButton">Оживить альбом</button>
+    <div id="statusText">Загрузка...</div>
     <div id="clickOverlay"></div>
 
     <div id="fsContainer">
@@ -78,8 +78,8 @@
         const statusText = document.getElementById('statusText');
 
         let activeVideo = null;
+        let videoList = [];
 
-        // Настройка MindAR: высокая стабилизация для "магии"
         sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001; missTolerance: 5;`);
 
         for (let i = 0; i < count; i++) {
@@ -89,57 +89,53 @@
             v.setAttribute('loop', 'true');
             v.setAttribute('crossorigin', 'anonymous');
             v.setAttribute('playsinline', '');
+            v.setAttribute('webkit-playsinline', '');
             v.muted = true;
+            v.preload = "auto"; // Заставляем браузер качать видео заранее
+            
             document.getElementById('video-assets').appendChild(v);
+            videoList.push(v);
 
             const entity = document.createElement('a-entity');
             entity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
             
-            // ВОТ ОНА МАГИЯ: видео отображается прямо на фото
             const plane = document.createElement('a-video');
             plane.setAttribute('src', `#vid${i}`);
             plane.setAttribute('width', '1'); 
-            plane.setAttribute('height', '0.56'); // Горизонтальное видео
+            plane.setAttribute('height', '0.56');
             
             entity.appendChild(plane);
             sceneEl.appendChild(entity);
 
             entity.addEventListener('targetFound', () => {
-                v.play();
+                v.play().catch(err => console.log("Ошибка автоплея:", err));
                 activeVideo = v;
                 clickOverlay.style.display = 'block';
                 statusText.style.display = 'none';
             });
 
             entity.addEventListener('targetLost', () => {
-                // Если мы НЕ смотрим в полный экран, ставим на паузу
                 if (fsContainer.style.display !== 'flex') {
                     v.pause();
                     activeVideo = null;
                     clickOverlay.style.display = 'none';
                     statusText.style.display = 'block';
-                    statusText.innerText = "Поиск фотографии...";
+                    statusText.innerText = "Наведите на фото курсанта";
                 }
             });
         }
 
-        // КЛИК -> Переход из AR в Fullscreen без черного экрана
         clickOverlay.addEventListener('click', () => {
             if (!activeVideo) return;
-
             fsVideo.src = activeVideo.src;
-            fsVideo.currentTime = activeVideo.currentTime; // Синхронизация времени
-            
+            fsVideo.currentTime = activeVideo.currentTime;
             activeVideo.pause(); 
             fsContainer.style.display = 'flex';
             fsVideo.play();
         });
 
-        // ЗАКРЫТЬ -> Возврат к "магии" на бумаге
         closeBtn.addEventListener('click', () => {
-            if (activeVideo) {
-                activeVideo.currentTime = fsVideo.currentTime;
-            }
+            if (activeVideo) activeVideo.currentTime = fsVideo.currentTime;
             fsVideo.pause();
             fsVideo.src = "";
             fsContainer.style.display = 'none';
@@ -150,8 +146,18 @@
             startBtn.style.display = 'block';
         });
 
+        // САМАЯ ВАЖНАЯ ЧАСТЬ: Разблокировка видео при нажатии на старт
         startBtn.addEventListener('click', () => {
             sceneEl.systems['mindar-image-system'].start();
+            
+            // "Прогреваем" все видео, чтобы браузер разрешил автоплей
+            videoList.forEach(vid => {
+                vid.play().then(() => {
+                    vid.pause();
+                    vid.currentTime = 0;
+                }).catch(e => console.log("Unlock failed", e));
+            });
+
             startBtn.style.display = 'none';
             statusText.innerText = "Наведите на фото курсанта";
         });
