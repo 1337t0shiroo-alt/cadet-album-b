@@ -11,31 +11,24 @@
 
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
-        
-        /* Кнопка запуска */
         #startButton {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             z-index: 10000; padding: 20px 40px; font-size: 18px; font-weight: bold;
             background: #002d5e; color: #d4af37; border: 2px solid #d4af37;
             border-radius: 50px; cursor: pointer; text-transform: uppercase;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         }
-
-        /* Кнопка звука */
         #muteButton {
             position: fixed; bottom: 30px; right: 30px; z-index: 10000;
             width: 65px; height: 65px; background: rgba(0, 45, 94, 0.9);
             color: #d4af37; border: 2px solid #d4af37; border-radius: 50%;
             cursor: pointer; display: none; font-size: 28px;
-            align-items: center; justify-content: center;
+            display: flex; align-items: center; justify-content: center;
         }
-
-        /* Индикатор поиска фото */
         #overlay {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
             z-index: 9999; color: #fff; background: rgba(0,0,0,0.6);
             padding: 10px 25px; border-radius: 30px; display: none;
-            border: 1px solid rgba(212, 175, 55, 0.5);
+            border: 1px solid rgba(212, 175, 55, 0.5); font-size: 14px;
         }
     </style>
 </head>
@@ -43,23 +36,25 @@
 
     <button id="startButton">Загрузка данных...</button>
     <button id="muteButton">🔇</button>
-    <div id="overlay">Наведите камеру на фотографию</div>
+    <div id="overlay">Наведите камеру. Нажмите на видео, чтобы расширить.</div>
 
     <a-scene id="main-scene" 
         mindar-image="autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001; missTolerance: 5; uiScanning: no;" 
         color-space="sRGB" 
-        renderer="colorManagement: true; precision: medium; antialias: true; logarithmicDepthBuffer: true;" 
+        renderer="colorManagement: true; precision: medium; antialias: true;" 
         vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
         
         <a-assets id="video-assets"></a-assets>
-        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+        <a-camera position="0 0 0" look-controls="enabled: false">
+            <a-entity cursor="fuse: false; rayOrigin: mouse;" raycaster="objects: .clickable"></a-entity>
+        </a-camera>
     </a-scene>
 
     <script>
-        // Получаем параметры из ссылки
         const params = new URLSearchParams(window.location.search);
-        const squadId = params.get('squad') || '1'; // Номер взвода
-        const count = parseInt(params.get('count')) || 4; // Количество человек
+        const squadId = params.get('squad') || '1'; 
+        const count = parseInt(params.get('count')) || 4; 
 
         const sceneEl = document.querySelector('#main-scene');
         const assetsEl = document.querySelector('#video-assets');
@@ -67,12 +62,9 @@
         const muteButton = document.getElementById('muteButton');
         const overlay = document.getElementById('overlay');
 
-        // Подключаем файл маркеров взвода
-        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001; uiScanning: no;`);
+        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; uiScanning: no;`);
 
-        // Создаем AR-объекты для каждого курсанта во взводе
         for (let i = 0; i < count; i++) {
-            // 1. Видео-ассет
             const v = document.createElement('video');
             v.id = `vid${i}`;
             v.src = `./videos/${squadId}_${i}.mp4`;
@@ -83,20 +75,31 @@
             v.muted = true;
             assetsEl.appendChild(v);
 
-            // 2. AR-контейнер
             const entity = document.createElement('a-entity');
             entity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
             
-            // 3. Плоскость для видео (Горизонтальная пропорция 16:9)
             const plane = document.createElement('a-video');
             plane.setAttribute('src', `#vid${i}`);
             plane.setAttribute('width', '1'); 
-            plane.setAttribute('height', '0.56'); // Идеально для горизонтального видео
+            plane.setAttribute('height', '0.56');
+            plane.setAttribute('class', 'clickable'); // Делаем видео "кликабельным"
             
+            // Функция полноэкранного режима при нажатии
+            plane.addEventListener('click', () => {
+                if (v.requestFullscreen) {
+                    v.requestFullscreen();
+                } else if (v.webkitEnterFullscreen) {
+                    v.webkitEnterFullscreen(); // Для iPhone/Safari
+                } else if (v.msRequestFullscreen) {
+                    v.msRequestFullscreen();
+                }
+                v.muted = false; // При открытии на весь экран включаем звук
+                muteButton.innerText = '🔊';
+            });
+
             entity.appendChild(plane);
             sceneEl.appendChild(entity);
 
-            // Логика появления
             entity.addEventListener('targetFound', () => {
                 v.play();
                 overlay.style.display = 'none';
@@ -107,31 +110,22 @@
             });
         }
 
-        // Кнопка готова к работе
         startButton.innerText = "Оживить альбом";
 
         startButton.addEventListener('click', () => {
             sceneEl.systems['mindar-image-system'].start();
-            
-            // Разблокировка звука для всех видео
             document.querySelectorAll('video').forEach(vid => {
                 vid.play().then(() => vid.pause());
             });
-
             startButton.style.display = 'none';
             muteButton.style.display = 'flex';
             overlay.style.display = 'block';
         });
 
-        // Управление звуком
         muteButton.addEventListener('click', () => {
             const allVideos = document.querySelectorAll('video');
             const isMuted = allVideos[0].muted;
-
-            allVideos.forEach(vid => {
-                vid.muted = !isMuted;
-            });
-
+            allVideos.forEach(vid => vid.muted = !isMuted);
             muteButton.innerText = isMuted ? '🔊' : '🔇';
         });
     </script>
