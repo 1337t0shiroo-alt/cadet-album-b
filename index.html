@@ -1,133 +1,92 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta charset="UTF-8">
-    <title>AR Альбом - ДВЮИ МВД</title>
-    
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image.prod.js"></script>
-    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-aframe.prod.js"></script>
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const squadId = params.get('squad') || '1'; 
+    const count = parseInt(params.get('count')) || 4; 
 
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
-        #startButton {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 10000; padding: 20px 40px; font-size: 18px; font-weight: bold;
-            background: #002d5e; color: #d4af37; border: 2px solid #d4af37;
-            border-radius: 50px; cursor: pointer; text-transform: uppercase;
-        }
-        #muteButton {
-            position: fixed; bottom: 30px; right: 30px; z-index: 10000;
-            width: 65px; height: 65px; background: rgba(0, 45, 94, 0.9);
-            color: #d4af37; border: 2px solid #d4af37; border-radius: 50%;
-            cursor: pointer; display: none; font-size: 28px;
-            display: flex; align-items: center; justify-content: center;
-        }
-        #overlay {
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 9999; color: #fff; background: rgba(0,0,0,0.6);
-            padding: 10px 25px; border-radius: 30px; display: none;
-            border: 1px solid rgba(212, 175, 55, 0.5); font-size: 14px;
-        }
-    </style>
-</head>
-<body>
+    const sceneEl = document.querySelector('#main-scene');
+    const assetsEl = document.querySelector('#video-assets');
+    const startButton = document.getElementById('startButton');
+    const muteButton = document.getElementById('muteButton');
+    const overlay = document.getElementById('overlay');
 
-    <button id="startButton">Загрузка данных...</button>
-    <button id="muteButton">🔇</button>
-    <div id="overlay">Наведите камеру. Нажмите на видео, чтобы расширить.</div>
+    // Переменная для хранения ID текущего активного видео
+    let activeVideo = null;
 
-    <a-scene id="main-scene" 
-        mindar-image="autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001; missTolerance: 5; uiScanning: no;" 
-        color-space="sRGB" 
-        renderer="colorManagement: true; precision: medium; antialias: true;" 
-        vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+    sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; uiScanning: no;`);
+
+    for (let i = 0; i < count; i++) {
+        const v = document.createElement('video');
+        v.id = `vid${i}`;
+        v.src = `./videos/${squadId}_${i}.mp4`;
+        v.setAttribute('loop', 'true');
+        v.setAttribute('crossorigin', 'anonymous');
+        v.setAttribute('playsinline', '');
+        v.setAttribute('webkit-playsinline', '');
+        v.muted = true;
+        assetsEl.appendChild(v);
+
+        const entity = document.createElement('a-entity');
+        entity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
         
-        <a-assets id="video-assets"></a-assets>
+        const plane = document.createElement('a-video');
+        plane.setAttribute('src', `#vid${i}`);
+        plane.setAttribute('width', '1'); 
+        plane.setAttribute('height', '0.56');
+        
+        entity.appendChild(plane);
+        sceneEl.appendChild(entity);
 
-        <a-camera position="0 0 0" look-controls="enabled: false">
-            <a-entity cursor="fuse: false; rayOrigin: mouse;" raycaster="objects: .clickable"></a-entity>
-        </a-camera>
-    </a-scene>
+        // Отслеживаем, какое видео сейчас в кадре
+        entity.addEventListener('targetFound', () => {
+            v.play();
+            activeVideo = v; // Запоминаем текущее видео
+            overlay.style.display = 'none';
+        });
 
-    <script>
-        const params = new URLSearchParams(window.location.search);
-        const squadId = params.get('squad') || '1'; 
-        const count = parseInt(params.get('count')) || 4; 
-
-        const sceneEl = document.querySelector('#main-scene');
-        const assetsEl = document.querySelector('#video-assets');
-        const startButton = document.getElementById('startButton');
-        const muteButton = document.getElementById('muteButton');
-        const overlay = document.getElementById('overlay');
-
-        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; uiScanning: no;`);
-
-        for (let i = 0; i < count; i++) {
-            const v = document.createElement('video');
-            v.id = `vid${i}`;
-            v.src = `./videos/${squadId}_${i}.mp4`;
-            v.setAttribute('loop', 'true');
-            v.setAttribute('crossorigin', 'anonymous');
-            v.setAttribute('playsinline', '');
-            v.setAttribute('webkit-playsinline', '');
-            v.muted = true;
-            assetsEl.appendChild(v);
-
-            const entity = document.createElement('a-entity');
-            entity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
-            
-            const plane = document.createElement('a-video');
-            plane.setAttribute('src', `#vid${i}`);
-            plane.setAttribute('width', '1'); 
-            plane.setAttribute('height', '0.56');
-            plane.setAttribute('class', 'clickable'); // Делаем видео "кликабельным"
-            
-            // Функция полноэкранного режима при нажатии
-            plane.addEventListener('click', () => {
-                if (v.requestFullscreen) {
-                    v.requestFullscreen();
-                } else if (v.webkitEnterFullscreen) {
-                    v.webkitEnterFullscreen(); // Для iPhone/Safari
-                } else if (v.msRequestFullscreen) {
-                    v.msRequestFullscreen();
-                }
-                v.muted = false; // При открытии на весь экран включаем звук
-                muteButton.innerText = '🔊';
-            });
-
-            entity.appendChild(plane);
-            sceneEl.appendChild(entity);
-
-            entity.addEventListener('targetFound', () => {
-                v.play();
-                overlay.style.display = 'none';
-            });
-            entity.addEventListener('targetLost', () => {
-                v.pause();
-                overlay.style.display = 'block';
-            });
-        }
-
-        startButton.innerText = "Оживить альбом";
-
-        startButton.addEventListener('click', () => {
-            sceneEl.systems['mindar-image-system'].start();
-            document.querySelectorAll('video').forEach(vid => {
-                vid.play().then(() => vid.pause());
-            });
-            startButton.style.display = 'none';
-            muteButton.style.display = 'flex';
+        entity.addEventListener('targetLost', () => {
+            v.pause();
+            if (activeVideo === v) activeVideo = null; // Забываем, если потеряли
             overlay.style.display = 'block';
         });
+    }
 
-        muteButton.addEventListener('click', () => {
-            const allVideos = document.querySelectorAll('video');
-            const isMuted = allVideos[0].muted;
-            allVideos.forEach(vid => vid.muted = !isMuted);
-            muteButton.innerText = isMuted ? '🔊' : '🔇';
+    // ГЛОБАЛЬНЫЙ КЛИК (Самый надежный способ для Fullscreen)
+    window.addEventListener('click', () => {
+        // Если мы в AR и есть активное видео — разворачиваем его
+        if (activeVideo && !document.fullscreenElement) {
+            
+            // Для Android / Chrome
+            if (activeVideo.requestFullscreen) {
+                activeVideo.requestFullscreen();
+            } 
+            // Для iPhone / Safari (важный костыль)
+            else if (activeVideo.webkitEnterFullscreen) {
+                activeVideo.webkitEnterFullscreen();
+            } 
+            
+            activeVideo.muted = false; // Включаем звук при просмотре
+            muteButton.innerText = '🔊';
+        }
+    });
+
+    startButton.innerText = "Оживить альбом";
+
+    startButton.addEventListener('click', (e) => {
+        e.stopPropagation(); // Чтобы не сработал глобальный клик сразу при старте
+        sceneEl.systems['mindar-image-system'].start();
+        document.querySelectorAll('video').forEach(vid => {
+            vid.play().then(() => vid.pause());
         });
-    </script>
-</body>
-</html>
+        startButton.style.display = 'none';
+        muteButton.style.display = 'flex';
+        overlay.style.display = 'block';
+    });
+
+    muteButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const allVideos = document.querySelectorAll('video');
+        const isMuted = allVideos[0].muted;
+        allVideos.forEach(vid => vid.muted = !isMuted);
+        muteButton.innerText = isMuted ? '🔊' : '🔇';
+    });
+</script>
