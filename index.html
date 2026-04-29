@@ -3,7 +3,7 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta charset="UTF-8">
-    <title>AR Альбом - ДВЮИ МВД</title>
+    <title>AR Альбом - Магия ДВЮИ</title>
     
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image.prod.js"></script>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
@@ -19,7 +19,7 @@
             border-radius: 50px; cursor: pointer; text-transform: uppercase;
         }
 
-        /* Слой для полноэкранного просмотра (чтобы не было черного экрана) */
+        /* Полноэкранный плеер (для детального просмотра) */
         #fsContainer {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: #000; z-index: 30000; display: none;
@@ -29,27 +29,27 @@
         #closeBtn {
             position: absolute; top: 30px; right: 20px; z-index: 30001;
             padding: 15px 25px; background: #d4af37; color: #002d5e;
-            border-radius: 10px; font-weight: bold; border: none; text-transform: uppercase;
+            border-radius: 10px; font-weight: bold; border: none;
         }
 
-        /* Слой для клика поверх AR */
+        /* Слой для клика, чтобы развернуть видео */
         #clickOverlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 500; display: none;
         }
 
-        #overlayText {
+        #statusText {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
             z-index: 999; color: #fff; background: rgba(0,0,0,0.6);
             padding: 10px 25px; border-radius: 30px; border: 1px solid #d4af37;
-            font-size: 14px; pointer-events: none; text-align: center;
+            font-size: 14px; pointer-events: none;
         }
     </style>
 </head>
 <body>
 
-    <button id="startButton">Оживить альбом</button>
-    <div id="overlayText">Загрузка...</div>
+    <button id="startButton">Оживить фото</button>
+    <div id="statusText">Загрузка системы...</div>
     <div id="clickOverlay"></div>
 
     <div id="fsContainer">
@@ -57,8 +57,9 @@
         <video id="fsVideo" controls playsinline webkit-playsinline></video>
     </div>
 
-    <a-scene id="main-scene" 
-        embedded vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+    <a-scene id="main-scene" embedded 
+        vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+        
         <a-assets id="video-assets"></a-assets>
         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
     </a-scene>
@@ -74,12 +75,12 @@
         const fsVideo = document.getElementById('fsVideo');
         const closeBtn = document.getElementById('closeBtn');
         const clickOverlay = document.getElementById('clickOverlay');
-        const overlayText = document.getElementById('overlayText');
+        const statusText = document.getElementById('statusText');
 
         let activeVideo = null;
 
-        // Инициализация системы MindAR через JS (так надежнее)
-        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001;`);
+        // Настройка MindAR: высокая стабилизация для "магии"
+        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001; missTolerance: 5;`);
 
         for (let i = 0; i < count; i++) {
             const v = document.createElement('video');
@@ -94,6 +95,7 @@
             const entity = document.createElement('a-entity');
             entity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
             
+            // ВОТ ОНА МАГИЯ: видео отображается прямо на фото
             const plane = document.createElement('a-video');
             plane.setAttribute('src', `#vid${i}`);
             plane.setAttribute('width', '1'); 
@@ -106,37 +108,37 @@
                 v.play();
                 activeVideo = v;
                 clickOverlay.style.display = 'block';
-                overlayText.innerText = "Нажмите на экран, чтобы развернуть";
+                statusText.style.display = 'none';
             });
 
             entity.addEventListener('targetLost', () => {
-                v.pause();
-                if (activeVideo === v) {
+                // Если мы НЕ смотрим в полный экран, ставим на паузу
+                if (fsContainer.style.display !== 'flex') {
+                    v.pause();
                     activeVideo = null;
                     clickOverlay.style.display = 'none';
-                    overlayText.innerText = "Наведите на фото курсанта";
+                    statusText.style.display = 'block';
+                    statusText.innerText = "Поиск фотографии...";
                 }
             });
         }
 
-        // Логика разворачивания (Синхронизация)
+        // КЛИК -> Переход из AR в Fullscreen без черного экрана
         clickOverlay.addEventListener('click', () => {
             if (!activeVideo) return;
 
-            // Копируем текущее видео в полноэкранный плеер
             fsVideo.src = activeVideo.src;
-            fsVideo.currentTime = activeVideo.currentTime;
+            fsVideo.currentTime = activeVideo.currentTime; // Синхронизация времени
             
             activeVideo.pause(); 
             fsContainer.style.display = 'flex';
             fsVideo.play();
         });
 
-        // Возврат в AR
+        // ЗАКРЫТЬ -> Возврат к "магии" на бумаге
         closeBtn.addEventListener('click', () => {
             if (activeVideo) {
                 activeVideo.currentTime = fsVideo.currentTime;
-                // Если телефон всё еще направлен на фото, targetFound подхватит видео
             }
             fsVideo.pause();
             fsVideo.src = "";
@@ -144,13 +146,14 @@
         });
 
         sceneEl.addEventListener('ready', () => {
-            overlayText.innerText = "Наведите на фото курсанта";
+            statusText.innerText = "Система готова";
             startBtn.style.display = 'block';
         });
 
         startBtn.addEventListener('click', () => {
             sceneEl.systems['mindar-image-system'].start();
             startBtn.style.display = 'none';
+            statusText.innerText = "Наведите на фото курсанта";
         });
     </script>
 </body>
