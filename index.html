@@ -11,45 +11,53 @@
 
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        
         #startButton {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             z-index: 10000; padding: 20px 40px; font-size: 18px; font-weight: bold;
             background: #002d5e; color: #d4af37; border: 2px solid #d4af37;
             border-radius: 50px; cursor: pointer; text-transform: uppercase;
         }
-        #muteButton {
-            position: fixed; bottom: 30px; right: 30px; z-index: 10000;
-            width: 65px; height: 65px; background: rgba(0, 45, 94, 0.9);
-            color: #d4af37; border: 2px solid #d4af37; border-radius: 50%;
-            cursor: pointer; display: none; font-size: 28px;
-            display: flex; align-items: center; justify-content: center;
-        }
-        #expandButton {
+
+        /* КОНТЕЙНЕР ДЛЯ ВИДЕО-ПЛЕЕРА */
+        #videoContainer {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 999; display: none; cursor: pointer; background: rgba(0,0,0,0);
+            background: rgba(0,0,0,0.9); z-index: 20000;
+            display: none; align-items: center; justify-content: center;
         }
+        
+        #mainVideo {
+            width: 100%; max-height: 80vh; border: 2px solid #d4af37;
+        }
+
+        #closeButton {
+            position: absolute; top: 30px; right: 20px;
+            padding: 15px 25px; background: #d4af37; color: #002d5e;
+            border-radius: 10px; font-weight: bold; cursor: pointer;
+        }
+
         #overlay {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
             z-index: 9998; color: #fff; background: rgba(0,0,0,0.6);
-            padding: 10px 25px; border-radius: 30px; display: none;
-            border: 1px solid rgba(212, 175, 55, 0.5); font-size: 14px;
-            pointer-events: none;
+            padding: 10px 25px; border-radius: 30px; border: 1px solid #d4af37;
         }
     </style>
 </head>
 <body>
 
-    <button id="startButton">Загрузка данных...</button>
-    <button id="muteButton">🔇</button>
-    <div id="expandButton"></div>
-    <div id="overlay">Наведите камеру на фото. Тапните для полного экрана.</div>
+    <button id="startButton">ЗАПУСТИТЬ КАМЕРУ</button>
+
+    <div id="videoContainer">
+        <div id="closeButton">ЗАКРЫТЬ X</div>
+        <video id="mainVideo" controls playsinline></video>
+    </div>
+
+    <div id="overlay">Наведите камеру на фотографию</div>
 
     <a-scene id="main-scene" 
-        mindar-image="autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001; missTolerance: 5; uiScanning: no;" 
-        color-space="sRGB" renderer="colorManagement: true; precision: medium; antialias: true;" 
+        mindar-image="autoStart: false; uiScanning: no;" 
+        embedded color-space="sRGB" 
         vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
-        
-        <a-assets id="video-assets"></a-assets>
         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
     </a-scene>
 
@@ -59,94 +67,45 @@
         const count = parseInt(params.get('count')) || 4; 
 
         const sceneEl = document.querySelector('#main-scene');
-        const assetsEl = document.querySelector('#video-assets');
         const startButton = document.getElementById('startButton');
-        const muteButton = document.getElementById('muteButton');
-        const expandButton = document.getElementById('expandButton');
-        const overlay = document.getElementById('overlay');
+        const videoContainer = document.getElementById('videoContainer');
+        const mainVideo = document.getElementById('mainVideo');
+        const closeButton = document.getElementById('closeButton');
 
-        let activeVideo = null;
-
+        // Подключаем только маркеры
         sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; uiScanning: no;`);
 
+        // Создаем скрытые цели
         for (let i = 0; i < count; i++) {
-            const v = document.createElement('video');
-            v.id = `vid${i}`;
-            v.src = `./videos/${squadId}_${i}.mp4`;
-            v.setAttribute('loop', 'true');
-            v.setAttribute('crossorigin', 'anonymous');
-            v.setAttribute('playsinline', '');
-            v.setAttribute('webkit-playsinline', '');
-            v.muted = true;
-            assetsEl.appendChild(v);
-
             const entity = document.createElement('a-entity');
             entity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
             
-            const plane = document.createElement('a-video');
-            plane.setAttribute('src', `#vid${i}`);
-            plane.setAttribute('width', '1'); 
-            plane.setAttribute('height', '0.56');
-            
-            entity.appendChild(plane);
-            sceneEl.appendChild(entity);
-
+            // Как только цель найдена
             entity.addEventListener('targetFound', () => {
-                v.play();
-                activeVideo = v;
-                overlay.style.display = 'none';
-                expandButton.style.display = 'block';
+                const videoPath = `./videos/${squadId}_${i}.mp4`;
+                
+                // Если плеер уже открыт — ничего не делаем
+                if (videoContainer.style.display === 'flex') return;
+
+                // Загружаем видео в главный плеер
+                mainVideo.src = videoPath;
+                videoContainer.style.display = 'flex';
+                mainVideo.play();
             });
 
-            entity.addEventListener('targetLost', () => {
-                // ПРОВЕРКА: Если видео развернуто - НЕ ставим на паузу
-                const isFS = document.fullscreenElement || document.webkitCurrentFullScreenElement || v.webkitDisplayingFullscreen;
-                
-                if (!isFS) {
-                    v.pause();
-                    if (activeVideo === v) {
-                        activeVideo = null;
-                        expandButton.style.display = 'none';
-                    }
-                    overlay.style.display = 'block';
-                }
-            });
+            sceneEl.appendChild(entity);
         }
 
-        expandButton.addEventListener('click', () => {
-            if (!activeVideo) return;
-
-            // Перед развертыванием убеждаемся, что видео играет
-            activeVideo.play(); 
-
-            if (activeVideo.webkitEnterFullscreen) {
-                activeVideo.webkitEnterFullscreen();
-            } else if (activeVideo.requestFullscreen) {
-                activeVideo.requestFullscreen();
-            }
-
-            activeVideo.muted = false;
-            muteButton.innerText = '🔊';
+        // Кнопка закрытия плеера
+        closeButton.addEventListener('click', () => {
+            mainVideo.pause();
+            mainVideo.src = "";
+            videoContainer.style.display = 'none';
         });
-
-        startButton.innerText = "Оживить альбом";
 
         startButton.addEventListener('click', () => {
             sceneEl.systems['mindar-image-system'].start();
-            document.querySelectorAll('video').forEach(vid => {
-                vid.play().then(() => vid.pause());
-            });
             startButton.style.display = 'none';
-            muteButton.style.display = 'flex';
-            overlay.style.display = 'block';
-        });
-
-        muteButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const allVideos = document.querySelectorAll('video');
-            const isMuted = allVideos[0].muted;
-            allVideos.forEach(vid => vid.muted = !isMuted);
-            muteButton.innerText = isMuted ? '🔊' : '🔇';
         });
     </script>
 </body>
