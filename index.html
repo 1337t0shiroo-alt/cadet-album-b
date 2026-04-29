@@ -19,45 +19,40 @@
             border-radius: 50px; cursor: pointer; text-transform: uppercase;
         }
 
-        /* Полноэкранный плеер */
-        #fsContainer {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: #000; z-index: 30000; display: none;
-            flex-direction: column; align-items: center; justify-content: center;
-        }
-        #fsVideo { width: 100%; height: auto; max-height: 100%; }
-        #closeBtn {
-            position: absolute; top: 30px; right: 20px; z-index: 30001;
-            padding: 15px 25px; background: #d4af37; color: #002d5e;
-            border-radius: 10px; font-weight: bold; border: none;
+        #muteButton {
+            position: fixed; bottom: 30px; right: 30px; z-index: 10000;
+            width: 65px; height: 65px; background: rgba(0, 45, 94, 0.9);
+            color: #d4af37; border: 2px solid #d4af37; border-radius: 50%;
+            cursor: pointer; display: none; font-size: 28px;
+            align-items: center; justify-content: center;
         }
 
-        /* Слой для тапа */
-        #clickOverlay {
+        /* КНОПКА РАЗВЕРТЫВАНИЯ - прозрачный слой на весь экран */
+        #expandButton {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 500; display: none;
+            z-index: 999; display: none; cursor: pointer;
+            background: rgba(0,0,0,0); /* Полностью прозрачная */
         }
 
-        #statusText {
+        #overlay {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 999; color: #fff; background: rgba(0,0,0,0.6);
-            padding: 10px 25px; border-radius: 30px; border: 1px solid #d4af37;
-            font-size: 14px; pointer-events: none;
+            z-index: 9998; color: #fff; background: rgba(0,0,0,0.6);
+            padding: 10px 25px; border-radius: 30px; display: none;
+            border: 1px solid rgba(212, 175, 55, 0.5); font-size: 14px;
+            pointer-events: none; /* Пропускает нажатия сквозь себя */
         }
     </style>
 </head>
 <body>
 
-    <button id="startButton">Оживить альбом</button>
-    <div id="statusText">Загрузка...</div>
-    <div id="clickOverlay"></div>
+    <button id="startButton">Загрузка данных...</button>
+    <button id="muteButton">🔇</button>
+    <div id="expandButton"></div>
+    <div id="overlay">Наведите камеру. Тапните по видео для полного экрана.</div>
 
-    <div id="fsContainer">
-        <button id="closeBtn">Закрыть [X]</button>
-        <video id="fsVideo" controls playsinline webkit-playsinline></video>
-    </div>
-
-    <a-scene id="main-scene" embedded 
+    <a-scene id="main-scene" 
+        mindar-image="autoStart: false; filterMinCF: 0.0001; filterBeta: 0.001; missTolerance: 5; uiScanning: no;" 
+        color-space="sRGB" renderer="colorManagement: true; precision: medium; antialias: true;" 
         vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
         
         <a-assets id="video-assets"></a-assets>
@@ -70,17 +65,15 @@
         const count = parseInt(params.get('count')) || 4; 
 
         const sceneEl = document.querySelector('#main-scene');
-        const startBtn = document.getElementById('startButton');
-        const fsContainer = document.getElementById('fsContainer');
-        const fsVideo = document.getElementById('fsVideo');
-        const closeBtn = document.getElementById('closeBtn');
-        const clickOverlay = document.getElementById('clickOverlay');
-        const statusText = document.getElementById('statusText');
+        const assetsEl = document.querySelector('#video-assets');
+        const startButton = document.getElementById('startButton');
+        const muteButton = document.getElementById('muteButton');
+        const expandButton = document.getElementById('expandButton');
+        const overlay = document.getElementById('overlay');
 
         let activeVideo = null;
-        let videoList = [];
 
-        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001; missTolerance: 5;`);
+        sceneEl.setAttribute('mindar-image', `imageTargetSrc: ./targets/squad${squadId}.mind; autoStart: false; uiScanning: no;`);
 
         for (let i = 0; i < count; i++) {
             const v = document.createElement('video');
@@ -91,10 +84,7 @@
             v.setAttribute('playsinline', '');
             v.setAttribute('webkit-playsinline', '');
             v.muted = true;
-            v.preload = "auto"; // Заставляем браузер качать видео заранее
-            
-            document.getElementById('video-assets').appendChild(v);
-            videoList.push(v);
+            assetsEl.appendChild(v);
 
             const entity = document.createElement('a-entity');
             entity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
@@ -108,58 +98,57 @@
             sceneEl.appendChild(entity);
 
             entity.addEventListener('targetFound', () => {
-                v.play().catch(err => console.log("Ошибка автоплея:", err));
+                v.play();
                 activeVideo = v;
-                clickOverlay.style.display = 'block';
-                statusText.style.display = 'none';
+                overlay.style.display = 'none';
+                expandButton.style.display = 'block'; // Показываем слой для клика
             });
 
             entity.addEventListener('targetLost', () => {
-                if (fsContainer.style.display !== 'flex') {
-                    v.pause();
+                v.pause();
+                if (activeVideo === v) {
                     activeVideo = null;
-                    clickOverlay.style.display = 'none';
-                    statusText.style.display = 'block';
-                    statusText.innerText = "Наведите на фото курсанта";
+                    expandButton.style.display = 'none';
                 }
+                overlay.style.display = 'block';
             });
         }
 
-        clickOverlay.addEventListener('click', () => {
+        // САМАЯ НАДЕЖНАЯ ФУНКЦИЯ РАЗВЕРТЫВАНИЯ
+        expandButton.addEventListener('click', () => {
             if (!activeVideo) return;
-            fsVideo.src = activeVideo.src;
-            fsVideo.currentTime = activeVideo.currentTime;
-            activeVideo.pause(); 
-            fsContainer.style.display = 'flex';
-            fsVideo.play();
+
+            // Логика для iPhone
+            if (activeVideo.webkitEnterFullscreen) {
+                activeVideo.webkitEnterFullscreen();
+            } 
+            // Логика для Android
+            else if (activeVideo.requestFullscreen) {
+                activeVideo.requestFullscreen();
+            }
+
+            activeVideo.muted = false;
+            muteButton.innerText = '🔊';
         });
 
-        closeBtn.addEventListener('click', () => {
-            if (activeVideo) activeVideo.currentTime = fsVideo.currentTime;
-            fsVideo.pause();
-            fsVideo.src = "";
-            fsContainer.style.display = 'none';
-        });
+        startButton.innerText = "Оживить альбом";
 
-        sceneEl.addEventListener('ready', () => {
-            statusText.innerText = "Система готова";
-            startBtn.style.display = 'block';
-        });
-
-        // САМАЯ ВАЖНАЯ ЧАСТЬ: Разблокировка видео при нажатии на старт
-        startBtn.addEventListener('click', () => {
+        startButton.addEventListener('click', () => {
             sceneEl.systems['mindar-image-system'].start();
-            
-            // "Прогреваем" все видео, чтобы браузер разрешил автоплей
-            videoList.forEach(vid => {
-                vid.play().then(() => {
-                    vid.pause();
-                    vid.currentTime = 0;
-                }).catch(e => console.log("Unlock failed", e));
+            document.querySelectorAll('video').forEach(vid => {
+                vid.play().then(() => vid.pause());
             });
+            startButton.style.display = 'none';
+            muteButton.style.display = 'flex';
+            overlay.style.display = 'block';
+        });
 
-            startBtn.style.display = 'none';
-            statusText.innerText = "Наведите на фото курсанта";
+        muteButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const allVideos = document.querySelectorAll('video');
+            const isMuted = allVideos[0].muted;
+            allVideos.forEach(vid => vid.muted = !isMuted);
+            muteButton.innerText = isMuted ? '🔊' : '🔇';
         });
     </script>
 </body>
